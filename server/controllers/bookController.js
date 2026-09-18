@@ -1,12 +1,11 @@
-import Book from '../models/Book.js';
-import Transaction from '../models/Transaction.js';
+import store from '../data/store.js';
 
 // @desc    Get all books
 // @route   GET /api/books
 // @access  Public
 export const getBooks = async (req, res) => {
   try {
-    const books = await Book.find().sort({ createdAt: -1 });
+    const books = store.getBooks();
     res.json(books);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -18,7 +17,7 @@ export const getBooks = async (req, res) => {
 // @access  Public
 export const getBookById = async (req, res) => {
   try {
-    const book = await Book.findById(req.params.id);
+    const book = store.getBookById(req.params.id);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
@@ -35,29 +34,40 @@ export const createBook = async (req, res) => {
   const { title, author, category, isbn, quantity } = req.body;
 
   try {
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: 'Book title is required' });
+    }
+    if (!author || !author.trim()) {
+      return res.status(400).json({ message: 'Author name is required' });
+    }
+    if (!category || !category.trim()) {
+      return res.status(400).json({ message: 'Category is required' });
+    }
+    if (!isbn || !isbn.trim()) {
+      return res.status(400).json({ message: 'ISBN is required' });
+    }
+
     // Check if ISBN already exists
-    const isbnExists = await Book.findOne({ isbn });
+    const isbnExists = store.findBookByIsbn(isbn);
     if (isbnExists) {
       return res.status(400).json({ message: 'Book with this ISBN already exists' });
     }
 
-    const qty = quantity ? parseInt(quantity) : 1;
-    const book = new Book({
+    const qty = quantity !== undefined ? parseInt(quantity, 10) : 1;
+    if (isNaN(qty) || qty < 1) {
+      return res.status(400).json({ message: 'Quantity must be at least 1' });
+    }
+
+    const createdBook = store.createBook({
       title,
       author,
       category,
       isbn,
       quantity: qty,
-      availableQuantity: qty,
     });
 
-    const createdBook = await book.save();
     res.status(201).json(createdBook);
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((val) => val.message);
-      return res.status(400).json({ message: messages.join(', ') });
-    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -69,21 +79,21 @@ export const updateBook = async (req, res) => {
   const { title, author, category, isbn, quantity } = req.body;
 
   try {
-    const book = await Book.findById(req.params.id);
+    const book = store.getBookById(req.params.id);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
 
     // Check if ISBN is taken by another book
-    if (isbn && isbn !== book.isbn) {
-      const isbnExists = await Book.findOne({ isbn });
-      if (isbnExists) {
+    if (isbn && isbn.trim() !== book.isbn) {
+      const isbnExists = store.findBookByIsbn(isbn);
+      if (isbnExists && isbnExists._id !== req.params.id) {
         return res.status(400).json({ message: 'Book with this ISBN already exists' });
       }
     }
 
     if (quantity !== undefined) {
-      const newQty = parseInt(quantity);
+      const newQty = parseInt(quantity, 10);
       if (isNaN(newQty) || newQty < 0) {
         return res.status(400).json({ message: 'Quantity must be a positive number' });
       }
@@ -96,23 +106,18 @@ export const updateBook = async (req, res) => {
           message: `Cannot reduce total quantity to ${newQty}. Currently, ${book.quantity - book.availableQuantity} copies are issued.`,
         });
       }
-
-      book.quantity = newQty;
-      book.availableQuantity = newAvailable;
     }
 
-    book.title = title || book.title;
-    book.author = author || book.author;
-    book.category = category || book.category;
-    book.isbn = isbn || book.isbn;
+    const updatedBook = store.updateBook(req.params.id, {
+      title,
+      author,
+      category,
+      isbn,
+      quantity,
+    });
 
-    const updatedBook = await book.save();
     res.json(updatedBook);
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((val) => val.message);
-      return res.status(400).json({ message: messages.join(', ') });
-    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -122,23 +127,19 @@ export const updateBook = async (req, res) => {
 // @access  Public
 export const deleteBook = async (req, res) => {
   try {
-    const book = await Book.findById(req.params.id);
+    const book = store.getBookById(req.params.id);
     if (!book) {
       return res.status(404).json({ message: 'Book not found' });
     }
 
     // Check if the book has any active transactions (Issued)
-    const activeTransactions = await Transaction.findOne({ bookId: req.params.id, status: 'Issued' });
-    if (activeTransactions) {
+    if (store.hasActiveTransactionForBook(req.params.id)) {
       return res.status(400).json({
         message: 'Cannot delete book. Some copies are currently issued to members.',
       });
     }
 
-    // Delete associated transactions (optional, or we can keep them for history, but let's delete them to avoid orphaned data, or keep them. Spec says delete book record, let's clean up or keep it. Let's delete all transactions for this book so we don't have broken references)
-    await Transaction.deleteMany({ bookId: req.params.id });
-    await Book.findByIdAndDelete(req.params.id);
-
+    store.deleteBook(req.params.id);
     res.json({ message: 'Book and its transaction history deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });

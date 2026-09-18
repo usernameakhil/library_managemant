@@ -1,12 +1,13 @@
-# Library Management System (MERN Stack)
+# Library Management System
 
-A simple full-stack web application developed using the MERN stack (MongoDB, Express.js, React.js, and Node.js) with Tailwind CSS styling. The system helps librarians manage books, library members, and track book issues and returns with real-time stock updating and validation checks.
+A full-stack web application developed using Express.js, React.js, and Node.js with Tailwind CSS styling. The system operates with **hardcoded in-memory data (Zero MongoDB / Database setup required)**. Librarians can manage books, library members, and track book issues and returns with real-time stock updating and validation checks.
 
 ## Objectives
 - **Book Management**: Add, update, view, and delete books.
 - **Member Management**: Register and manage library members.
 - **Issue & Return**: Record book issue transactions, automatically decrementing available stock, and record book returns to restore stock.
 - **Dashboard**: Display key library metrics (total book titles, copies, members, active issues, and returned history).
+- **Zero Database Setup**: Pre-configured with rich hardcoded library inventory, registered members, and lending history.
 
 ---
 
@@ -18,17 +19,18 @@ library-management-system/
 │   ├── src/
 │   │   ├── components/         # Shared UI components (Layout, Navbar, StatCard)
 │   │   ├── pages/              # Page views (Dashboard, Books, Members, Transactions, Issue)
-│   │   ├── services/           # Axios HTTP API client
+│   │   ├── services/           # Hardcoded API & fallback store
 │   │   ├── App.jsx             # React Routes and layouts
 │   │   ├── main.jsx            # React root mount
 │   │   └── index.css           # Tailwind CSS styles
 │   └── package.json
 ├── server/                     # Express Backend (Node.js)
-│   ├── config/                 # DB configuration
+│   ├── data/                   # In-memory hardcoded data store (No MongoDB)
 │   ├── controllers/            # Controller logic for Books, Members, Transactions
-│   ├── models/                 # Mongoose database models
+│   ├── models/                 # Pure schema references
 │   ├── routes/                 # Express API routes
 │   ├── server.js               # Express server entrypoint
+│   ├── seed.js                 # Hardcoded data reset utility
 │   └── package.json
 ├── package.json                # Root package.json coordinating dev operations
 └── README.md
@@ -36,30 +38,14 @@ library-management-system/
 
 ---
 
-## Database Design
+## Hardcoded Data Architecture
 
-The database contains three collection schemas:
+The system uses an in-memory data store (`server/data/store.js`) initialized with rich sample data:
+- **10 Books**: Fiction, Science, History, Technology, Self-Help, Sci-Fi, Psychology with individual ISBNs and available copy tracking.
+- **6 Members**: Borrower accounts with email and contact details.
+- **7 Transactions**: Active loans and historical returned books.
 
-1. **Books** (`Book` model):
-   - `title` (String, required)
-   - `author` (String, required)
-   - `category` (String, required)
-   - `isbn` (String, required, unique)
-   - `quantity` (Number, min 0, default 1)
-   - `availableQuantity` (Number, min 0, default equal to quantity)
-
-2. **Members** (`Member` model):
-   - `name` (String, required)
-   - `email` (String, required, unique, format validated)
-   - `phone` (String, required)
-   - `membershipDate` (Date, default Date.now)
-
-3. **Transactions** (`Transaction` model):
-   - `bookId` (ObjectId referencing Book, required)
-   - `memberId` (ObjectId referencing Member, required)
-   - `issueDate` (Date, default Date.now)
-   - `returnDate` (Date, default null)
-   - `status` (String enum: `['Issued', 'Returned']`, default `'Issued'`)
+All CRUD operations, issue/return transactions, and validation constraints (e.g. ISBN uniqueness, email validation, negative quantity checks, and preventing deletion of actively loaned books) operate in-memory.
 
 ---
 
@@ -87,41 +73,30 @@ The database contains three collection schemas:
 
 ---
 
-## Installation and Setup
+## Installation and Quick Start
 
 ### Prerequisites
 - **Node.js**: Installed on your system (v16+ recommended).
-- **MongoDB**: Installed locally and running on port `27017` (or configured via `.env` file).
+- **MongoDB**: **NOT NEEDED** - The application runs completely with hardcoded in-memory state.
 
 ### Step-by-Step Setup
 
-1. **Clone or Navigate to Project Directory**:
+1. **Install Root and Child Dependencies**:
    ```bash
-   cd "/Users/akhil/LIBRARY MANAGEMENT SYSTEM"
-   ```
-
-2. **Install Root and Child Dependencies**:
-   You can install all dependencies (root, backend, and frontend) at once using the root coordinator scripts:
-   ```bash
-   # Install root dependencies
    npm install
-   
-   # Automatically install server & client dependencies
    npm run install-all
    ```
 
-3. **Database Configuration**:
-   Ensure MongoDB is running locally. The server is pre-configured to look for `mongodb://127.0.0.1:27017/library_db` in `server/.env`. If you need to change this, modify `server/.env`:
-   ```text
-   PORT=5001
-   MONGO_URI=mongodb://127.0.0.1:27017/your_db_name
-   ```
-
-4. **Run the Application**:
+2. **Run the Application**:
    Start both the backend server and Vite frontend development server concurrently:
    ```bash
    npm run dev
    ```
    
-   - **Frontend React app** will start at: `http://localhost:5173`
-   - **Backend API server** will start at: `http://localhost:5001`
+   - **Frontend React app**: `http://localhost:5173`
+   - **Backend API server**: `http://localhost:5001`
+
+3. **Optional - Run Individually**:
+   - Backend only: `npm run server`
+   - Frontend only: `npm run client` (also includes client-side fallback store so it functions even without the server running)
+   - Reset sample data: `npm run seed`

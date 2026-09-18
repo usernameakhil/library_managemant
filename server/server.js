@@ -1,7 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import connectDB from './config/db.js';
 
 // Route files
 import bookRoutes from './routes/bookRoutes.js';
@@ -10,9 +9,6 @@ import transactionRoutes from './routes/transactionRoutes.js';
 
 // Load env vars
 dotenv.config();
-
-// Connect to database
-connectDB();
 
 const app = express();
 
@@ -29,7 +25,10 @@ app.use('/api/transactions', transactionRoutes);
 
 // Simple root route
 app.get('/', (req, res) => {
-  res.send('API is running for Library Management System...');
+  res.json({
+    message: 'Library Management System API is running (Hardcoded In-Memory Mode - No MongoDB required)',
+    status: 'online',
+  });
 });
 
 // Error handling middleware
@@ -44,4 +43,5 @@ const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  console.log(`Database: In-Memory Hardcoded Store (No MongoDB required)`);
 });

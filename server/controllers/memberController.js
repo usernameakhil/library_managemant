@@ -1,12 +1,11 @@
-import Member from '../models/Member.js';
-import Transaction from '../models/Transaction.js';
+import store from '../data/store.js';
 
 // @desc    Get all members
 // @route   GET /api/members
 // @access  Public
 export const getMembers = async (req, res) => {
   try {
-    const members = await Member.find().sort({ createdAt: -1 });
+    const members = store.getMembers();
     res.json(members);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -18,7 +17,7 @@ export const getMembers = async (req, res) => {
 // @access  Public
 export const getMemberById = async (req, res) => {
   try {
-    const member = await Member.findById(req.params.id);
+    const member = store.getMemberById(req.params.id);
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
@@ -35,25 +34,35 @@ export const createMember = async (req, res) => {
   const { name, email, phone } = req.body;
 
   try {
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Member name is required' });
+    }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Please fill a valid email address' });
+    }
+
     // Check if email already exists
-    const emailExists = await Member.findOne({ email });
+    const emailExists = store.findMemberByEmail(email);
     if (emailExists) {
       return res.status(400).json({ message: 'Member with this email already exists' });
     }
 
-    const member = new Member({
+    const createdMember = store.createMember({
       name,
       email,
       phone,
     });
 
-    const createdMember = await member.save();
     res.status(201).json(createdMember);
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((val) => val.message);
-      return res.status(400).json({ message: messages.join(', ') });
-    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -65,30 +74,32 @@ export const updateMember = async (req, res) => {
   const { name, email, phone } = req.body;
 
   try {
-    const member = await Member.findById(req.params.id);
+    const member = store.getMemberById(req.params.id);
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
 
     // Check if email is taken by another member
-    if (email && email !== member.email) {
-      const emailExists = await Member.findOne({ email });
-      if (emailExists) {
+    if (email && email.toLowerCase().trim() !== member.email.toLowerCase().trim()) {
+      const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ message: 'Please fill a valid email address' });
+      }
+
+      const emailExists = store.findMemberByEmail(email);
+      if (emailExists && emailExists._id !== req.params.id) {
         return res.status(400).json({ message: 'Member with this email already exists' });
       }
     }
 
-    member.name = name || member.name;
-    member.email = email || member.email;
-    member.phone = phone || member.phone;
+    const updatedMember = store.updateMember(req.params.id, {
+      name,
+      email,
+      phone,
+    });
 
-    const updatedMember = await member.save();
     res.json(updatedMember);
   } catch (error) {
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map((val) => val.message);
-      return res.status(400).json({ message: messages.join(', ') });
-    }
     res.status(500).json({ message: error.message });
   }
 };
@@ -98,23 +109,19 @@ export const updateMember = async (req, res) => {
 // @access  Public
 export const deleteMember = async (req, res) => {
   try {
-    const member = await Member.findById(req.params.id);
+    const member = store.getMemberById(req.params.id);
     if (!member) {
       return res.status(404).json({ message: 'Member not found' });
     }
 
     // Check if member has any outstanding issued books
-    const outstandingBooks = await Transaction.findOne({ memberId: req.params.id, status: 'Issued' });
-    if (outstandingBooks) {
+    if (store.hasActiveTransactionForMember(req.params.id)) {
       return res.status(400).json({
         message: 'Cannot delete member. They currently have issued books that need to be returned.',
       });
     }
 
-    // Delete member's transaction history
-    await Transaction.deleteMany({ memberId: req.params.id });
-    await Member.findByIdAndDelete(req.params.id);
-
+    store.deleteMember(req.params.id);
     res.json({ message: 'Member and their transaction history deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
